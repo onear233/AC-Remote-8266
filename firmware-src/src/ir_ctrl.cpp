@@ -82,11 +82,12 @@ static bool sendKelon168State() {
   ac168.begin();
   if (!ac168Initialized) {  // 首次（开机后）保证帧有合法前导/校验
     ac168.stateReset();
+    // 库的 stateReset 默认值与本机原装遥控器不符，逐字节对齐（实测帧比对得出）：
+    //   byte6  默认 0x80（bit7 残留）→ 原装为 0x00
+    // 不调 setModel：库会写 Model1=8/On=1/Model2=1（byte18=0x38），
+    //   而原装遥控器 byte18=0x00，差异会导致空调报 FC 保护并自动关机。
     ac168Initialized = true;
   }
-
-  ac168.setModel(ac.model >= 1 ? (kelon168_ac_remote_model_t)ac.model
-                               : kelon168_ac_remote_model_t::DG11R201);
 
   // 1) sleep 先设：setSleep(true) 会改写 fan（下方 setFan 恢复）
   ac168.setSleep(ac.cur.sleep >= 0);
@@ -109,6 +110,20 @@ static bool sendKelon168State() {
     ac168.setMode(IRKelon168Ac::convertMode(ac.cur.mode));
     ac168.setFan(IRKelon168Ac::convertFan(ac.cur.fanspeed));
     ac168.setCommand(kKelon168CommandPower);
+  }
+
+  // 5) 发送前帧归一化：把与原装遥控器不符的残留位清掉（详见 stateReset 处注释）
+  uint8_t *frame = ac168.getRaw(true);  // getRaw 内部已算校验和，返回内部缓冲
+  frame[6] &= (uint8_t)~0x80;  // 清 byte6 bit7 残留（原装=0x00）
+  frame[18] = 0x00;            // 与原装一致：不写 Model/On 位
+  // byte6/18 变更后需重算校验和（getRaw 已算过，这里手动重算两次）
+  {
+    uint8_t s1 = 0;
+    for (uint8_t i = 2; i <= 12; i++) s1 ^= frame[i];
+    frame[13] = s1;
+    uint8_t s2 = 0;
+    for (uint8_t i = 14; i <= 19; i++) s2 ^= frame[i];
+    frame[20] = s2;
   }
 
   ac168.send();
