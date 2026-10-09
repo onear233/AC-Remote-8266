@@ -14,6 +14,10 @@ struct AcRuntime {
   uint32_t identifyStart = 0;
   String lastRx;               // 最近一次红外接收的摘要（Web 显示用）
   bool rxFeedbackEnabled = true;  // 红外状态反馈开关
+  String lastTxFrame;       // 最近一次发出的帧（hex，Web 调试显示）
+  uint32_t lastTxTime = 0;
+  String lastRxFrame;       // 最近一次收到的帧（hex，Web 调试显示）
+  uint32_t lastRxTime = 0;
 };
 
 extern AcRuntime ac;
